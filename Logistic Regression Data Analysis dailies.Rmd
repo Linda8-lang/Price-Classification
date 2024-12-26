@@ -1,0 +1,202 @@
+---
+title: "Logistic Regression -Dailies 12/22/24"
+author: "Linda"
+date: "`r Sys.Date()`"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+Load the libraries
+
+```{r, message=FALSE,warning=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(openxlsx)
+library(caret)
+library(fastDummies)
+```
+
+## Load the dataset
+
+
+```{r}
+data<-read.xlsx(file.choose())
+```
+
+## Exploratory Data Analysis
+
+Explore the dataset
+
+```{r, echo=TRUE,eval=TRUE}
+head(data) # 6 first rows
+
+```
+```{r}
+summary(data) #Descriptive statistics
+```
+
+
+
+ Data cleaning
+```{r}
+sum(is.na(data))
+##Check missing values
+data$last_review[is.na(data$last_review)]<-0
+data$name[is.na(data$name)]<-'Unknown'
+data$host_name[is.na(data$host_name)]<-'Unkown'
+data$reviews_per_month[is.na(data$reviews_per_month)]<-mode(data$reviews_per_month)[1]
+```
+```{r}
+## Check the absence of na values
+colSums(is.na(data))
+```
+```{r}
+###Check for outliers in the numerical variables using boxplots
+data|>ggplot(aes(price))+geom_boxplot()+theme_bw()
+
+```
+```{r}
+data|>ggplot(aes(minimum_nights))+geom_boxplot()+theme_bw()
+```
+```{r}
+data|>ggplot(aes(number_of_reviews))+geom_boxplot()+theme_bw()
+```
+```{r}
+data|>ggplot(aes(availability_365))+geom_boxplot()+theme_bw()
+```
+```{r}
+data|>ggplot(aes(calculated_host_listings_count))+geom_boxplot()+theme_bw()
+```
+```{r}
+##Removing outliers
+data<-data|>group_by(room_type)|>
+  mutate(Q1=quantile(price,.25,na.rm=TRUE),
+         Q3=quantile(price,.75,na.rm=TRUE),
+         IQR=Q3-Q1,
+         Lower_bound=Q1 -1.5*IQR,
+         Upper_bound=Q3+ 1.5*IQR)|>
+  filter(price>=Lower_bound & price <= Upper_bound)|>
+  ungroup()|>
+  select(-Q1,-Q3,-IQR)
+summary(data$price)
+```
+```{r}
+data<-data|>
+  mutate(Q1=quantile(minimum_nights,0.25,na.rm=TRUE),
+                    Q3=quantile(minimum_nights,0.75,na.rm=TRUE),
+                    IQR=Q3-Q1,
+                    Lower_bound=Q1-1.5*IQR,
+                    Upper_bound=Q3+1.5*IQR)|>
+  filter(minimum_nights>=Lower_bound & minimum_nights<=Upper_bound)|>
+  select(-Q1,-Q3,-IQR)
+summary(data$minimum_nights)
+```
+
+
+
+
+## Detect and Remove the duplicated rows 
+```{r}
+sum(duplicated(data))
+data<-data|> ###Removes the duplicated rows
+  distinct()
+
+```
+
+
+## Select the columns to use to determine what happens when the price of a listing is higher than the mean price of the listings per night using the minimum nights requirement,availability of a listing during the year, the number of reviews and room type.
+```{r}
+data<-data|>
+  select('price','minimum_nights','number_of_reviews','availability_365','room_type')
+head(data) ## 6 first rows
+```
+
+
+Histograms for numerical variables
+```{r}
+data|>ggplot(aes(price))+
+  geom_histogram(binwidth = 20,position ='identity')+
+  theme_bw()+
+  labs(x='Price',y='Frequencies',title='Distribution of price per night')
+```
+```{r}
+data|>ggplot(aes(minimum_nights))+geom_histogram(binwidth = 2)+
+  theme_bw()+
+  labs(x='Minimum nights',y='Frequencies',title='Distribution of the minimum nights')
+```
+```{r}
+data|>ggplot(aes(availability_365))+geom_histogram(binwidth = 50 )+
+  theme_bw()+
+  labs(x='Availability',y='Frequencies',title='Distribution of the availability ')
+```
+## Bar chart for the room type proportions
+```{r}
+data|>ggplot(aes(room_type,fill=room_type))+geom_bar()+
+  theme_bw()+labs(x='Room type',y='Frequencies',title='Pie chart room type proportion')
+
+
+```
+
+## Converting categorical variables to numerical variables
+```{r}
+data$price_class<-ifelse(data$price>mean(data$price,na.rm=TRUE),1,0)  #Add column for converted price values
+##data<-dummy_cols(data, select_columns ='room_type' )##Create room type dummy variables
+head(data)
+```
+
+## Data partitioning
+Splitting the dataset into train and test
+```{r}
+set.seed(1124)#For reproducibility
+library(caret)
+index<-createDataPartition(data$price_class,
+        p=.7,list=FALSE)
+data_train<-data[index,]
+data_test<-data[-index,]
+head(data_train)
+```
+
+## Build the model
+This involves training the model on the expected output
+```{r}
+model<-glm(price_class~minimum_nights+number_of_reviews+availability_365+room_type,family=binomial,data=data_train)
+summary(model)
+```
+
+## Test the model
+```{r}
+data_test$predicted_probabilities<-predict(model,newdata=data_test,type='response')
+##Convert the predicted probabilities to binary of 1's and 0's with a threshold of .5
+data_test$predicted_class<-ifelse(data_test$predicted_probabilities>.5,1,0)
+
+head(data_test)
+
+```
+
+
+## Validate the model
+```{r}
+table(prediction=data_test$predicted_class, Actual=data_test$price_class)
+```
+
+## Confusion matrix 
+To validate the model accuracy and precision
+```{r}
+confusion_Matrix<-confusionMatrix(table(prediction=data_test$predicted_class, Actual=data_test$price_class))
+###Get the confusion matrix
+confusion_Matrix
+```
+
+##Histogram 
+To visualize the predicted probanilities
+```{r}
+data_test|>ggplot(aes(predicted_probabilities,fill=room_type))+geom_histogram(binwidth = .1,alpha=.5)+theme_bw()+
+  labs(x='Predicted Probabilities',y='Frequencies',title='Distribution of the predicted probabilities')
+
+```
+
+
+
+
+ 
