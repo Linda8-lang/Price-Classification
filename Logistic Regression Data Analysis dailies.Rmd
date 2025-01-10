@@ -188,7 +188,7 @@ confusion_Matrix
 ```
 
 ##Histogram 
-To visualize the predicted probanilities
+To visualize the predicted probabilities
 ```{r}
 data_test|>ggplot(aes(predicted_probabilities,fill=room_type))+geom_histogram(binwidth = .1,alpha=.5)+theme_bw()+
   labs(x='Predicted Probabilities',y='Frequencies',title='Distribution of the predicted probabilities')
