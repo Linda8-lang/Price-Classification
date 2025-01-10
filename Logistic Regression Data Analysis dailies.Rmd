@@ -1,7 +1,6 @@
 ---
 title: "Logistic Regression -Dailies 12/22/24"
 author: "Linda"
-date: "`r Sys.Date()`"
 output:
   word_document: default
   html_document: default
