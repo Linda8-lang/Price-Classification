@@ -1,5 +1,5 @@
 ---
-title: "Logistic Regression -Dailies 12/22/24"
+title: "Logistic Regression
 author: "Linda"
 output:
   word_document: default
